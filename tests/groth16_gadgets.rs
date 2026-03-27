@@ -1,14 +1,9 @@
-use std::{fs, io::BufWriter, path::PathBuf};
-
 use ark_groth16::{r1cs_to_qap::LibsnarkReduction, Groth16, Proof, ProvingKey, VerifyingKey};
-use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
-use once_cell::sync::Lazy;
 use proptest::prelude::*;
 
 use ark_r1cs_std::{
-    prelude::{AllocVar, CurveVar, EqGadget},
+    prelude::{AllocVar, CurveVar, EqGadget, ToBitsGadget},
     uint8::UInt8,
-    ToBitsGadget,
 };
 use ark_relations::r1cs::{ConstraintSynthesizer, ToConstraintField};
 use ark_snark::SNARK;
@@ -24,85 +19,6 @@ fn element_strategy() -> BoxedStrategy<Element> {
         .prop_map(|r| Element::encode_to_curve(&r))
         .boxed()
 }
-
-static DISCRETE_LOG_PK: Lazy<ProvingKey<Bls12_377>> = Lazy::new(|| {
-    let pk_bytes = include_bytes!("test_vectors/discrete_log_pk.bin");
-    ProvingKey::deserialize_uncompressed(&pk_bytes[..]).expect("can parse discrete log proving key")
-});
-
-static DISCRETE_LOG_VK: Lazy<VerifyingKey<Bls12_377>> = Lazy::new(|| {
-    let vk_bytes = include_bytes!("test_vectors/discrete_log_vk.param");
-    VerifyingKey::deserialize_uncompressed(&vk_bytes[..])
-        .expect("can parse discrete log verifying key")
-});
-
-static COMPRESSION_PK: Lazy<ProvingKey<Bls12_377>> = Lazy::new(|| {
-    let pk_bytes = include_bytes!("test_vectors/compression_pk.bin");
-    ProvingKey::deserialize_uncompressed(&pk_bytes[..]).expect("can parse compression proving key")
-});
-
-static COMPRESSION_VK: Lazy<VerifyingKey<Bls12_377>> = Lazy::new(|| {
-    let vk_bytes = include_bytes!("test_vectors/compression_vk.param");
-    VerifyingKey::deserialize_uncompressed(&vk_bytes[..])
-        .expect("can parse compression verifying key")
-});
-
-static DECOMPRESSION_PK: Lazy<ProvingKey<Bls12_377>> = Lazy::new(|| {
-    let pk_bytes = include_bytes!("test_vectors/decompression_pk.bin");
-    ProvingKey::deserialize_uncompressed(&pk_bytes[..])
-        .expect("can parse decompression proving key")
-});
-
-static DECOMPRESSION_VK: Lazy<VerifyingKey<Bls12_377>> = Lazy::new(|| {
-    let vk_bytes = include_bytes!("test_vectors/decompression_vk.param");
-    VerifyingKey::deserialize_uncompressed(&vk_bytes[..])
-        .expect("can parse decompression verifying key")
-});
-
-static ELLIGATOR_PK: Lazy<ProvingKey<Bls12_377>> = Lazy::new(|| {
-    let pk_bytes = include_bytes!("test_vectors/elligator_pk.bin");
-    ProvingKey::deserialize_uncompressed(&pk_bytes[..]).expect("can parse elligator proving key")
-});
-
-static ELLIGATOR_VK: Lazy<VerifyingKey<Bls12_377>> = Lazy::new(|| {
-    let vk_bytes = include_bytes!("test_vectors/elligator_vk.param");
-    VerifyingKey::deserialize_uncompressed(&vk_bytes[..])
-        .expect("can parse elligator verifying key")
-});
-
-static PUBLIC_ELEMENT_INPUT_PK: Lazy<ProvingKey<Bls12_377>> = Lazy::new(|| {
-    let pk_bytes = include_bytes!("test_vectors/public_element_input_pk.bin");
-    ProvingKey::deserialize_uncompressed(&pk_bytes[..])
-        .expect("can parse public element input proving key")
-});
-
-static PUBLIC_ELEMENT_INPUT_VK: Lazy<VerifyingKey<Bls12_377>> = Lazy::new(|| {
-    let vk_bytes = include_bytes!("test_vectors/public_element_input_vk.param");
-    VerifyingKey::deserialize_uncompressed(&vk_bytes[..])
-        .expect("can parse public element input verifying key")
-});
-
-static NEGATION_PK: Lazy<ProvingKey<Bls12_377>> = Lazy::new(|| {
-    let pk_bytes = include_bytes!("test_vectors/negation_pk.bin");
-    ProvingKey::deserialize_uncompressed(&pk_bytes[..]).expect("can parse negation proving key")
-});
-
-static NEGATION_VK: Lazy<VerifyingKey<Bls12_377>> = Lazy::new(|| {
-    let vk_bytes = include_bytes!("test_vectors/negation_vk.param");
-    VerifyingKey::deserialize_uncompressed(&vk_bytes[..]).expect("can parse negation verifying key")
-});
-
-static ADD_ASSIGN_ADD_PK: Lazy<ProvingKey<Bls12_377>> = Lazy::new(|| {
-    let pk_bytes = include_bytes!("test_vectors/add_assign_add_pk.bin");
-    ProvingKey::deserialize_uncompressed(&pk_bytes[..])
-        .expect("can parse add assign add proving key")
-});
-
-static ADD_ASSIGN_ADD_VK: Lazy<VerifyingKey<Bls12_377>> = Lazy::new(|| {
-    let vk_bytes = include_bytes!("test_vectors/add_assign_add_vk.param");
-    VerifyingKey::deserialize_uncompressed(&vk_bytes[..])
-        .expect("can parse add assign add verifying key")
-});
 
 #[derive(Clone)]
 struct DiscreteLogCircuit {
@@ -153,9 +69,7 @@ proptest! {
 #![proptest_config(ProptestConfig::with_cases(5))]
 #[test]
 fn groth16_dl_proof_happy_path(scalar_arr in scalar_strategy_random()) {
-        let pk = DISCRETE_LOG_PK.clone();
-        let vk = DISCRETE_LOG_VK.clone();
-
+        let (pk, vk) = DiscreteLogCircuit::generate_test_parameters();
         let mut rng = OsRng;
 
         let scalar = scalar_arr;
@@ -181,8 +95,7 @@ proptest! {
     #![proptest_config(ProptestConfig::with_cases(5))]
     #[test]
     fn groth16_dl_proof_unhappy_path(scalar_arr in scalar_strategy_random()) {
-        let pk = DISCRETE_LOG_PK.clone();
-        let vk = DISCRETE_LOG_VK.clone();
+        let (pk, vk) = DiscreteLogCircuit::generate_test_parameters();
         let mut rng = OsRng;
 
         let scalar = scalar_arr;
@@ -261,8 +174,7 @@ proptest! {
 #![proptest_config(ProptestConfig::with_cases(10))]
 #[test]
     fn groth16_compression_proof_happy_path(scalar in fr_strategy()) {
-        let pk = COMPRESSION_PK.clone();
-        let vk = COMPRESSION_VK.clone();
+        let (pk, vk) = CompressionCircuit::generate_test_parameters();
         let mut rng = OsRng;
 
         // Prover POV
@@ -292,8 +204,7 @@ proptest! {
 #![proptest_config(ProptestConfig::with_cases(10))]
 #[test]
     fn groth16_compression_proof_unhappy_path(scalar in fr_strategy()) {
-        let pk = COMPRESSION_PK.clone();
-        let vk = COMPRESSION_VK.clone();
+        let (pk, vk) = CompressionCircuit::generate_test_parameters();
         let mut rng = OsRng;
 
         // Prover POV
@@ -366,8 +277,7 @@ proptest! {
     #![proptest_config(ProptestConfig::with_cases(10))]
     #[test]
         fn groth16_decompression_proof_happy_path(scalar in fr_strategy()) {
-            let pk = DECOMPRESSION_PK.clone();
-            let vk = DECOMPRESSION_VK.clone();
+            let (pk, vk) = DecompressionCircuit::generate_test_parameters();
             let mut rng = OsRng;
 
             // Prover POV
@@ -397,8 +307,7 @@ proptest! {
     #![proptest_config(ProptestConfig::with_cases(10))]
     #[test]
         fn groth16_decompression_proof_unhappy_path(scalar in fr_strategy()) {
-            let pk = DECOMPRESSION_PK.clone();
-            let vk = DECOMPRESSION_VK.clone();
+            let (pk, vk) = DecompressionCircuit::generate_test_parameters();
             let mut rng = OsRng;
 
             // Prover POV
@@ -475,8 +384,7 @@ proptest! {
     #![proptest_config(ProptestConfig::with_cases(10))]
 #[test]
 fn groth16_elligator_proof_happy_path(field_element in fq_strategy()) {
-    let pk = ELLIGATOR_PK.clone();
-    let vk = ELLIGATOR_VK.clone();
+    let (pk, vk) = ElligatorCircuit::generate_test_parameters();
     let mut rng = OsRng;
 
     // Prover POV
@@ -505,8 +413,7 @@ proptest! {
     #![proptest_config(ProptestConfig::with_cases(10))]
 #[test]
 fn groth16_elligator_proof_unhappy_path(field_element in fq_strategy()) {
-    let pk = ELLIGATOR_PK.clone();
-    let vk = ELLIGATOR_VK.clone();
+    let (pk, vk) = ElligatorCircuit::generate_test_parameters();
     let mut rng = OsRng;
 
     // Prover POV
@@ -547,24 +454,15 @@ impl ConstraintSynthesizer<Fq> for PublicElementInput {
     }
 }
 
-impl PublicElementInput {
-    fn generate_test_parameters() -> (ProvingKey<Bls12_377>, VerifyingKey<Bls12_377>) {
-        let circuit = PublicElementInput {
-            point: Element::GENERATOR,
-        };
-        let (pk, vk) =
-            Groth16::<Bls12_377, LibsnarkReduction>::circuit_specific_setup(circuit, &mut OsRng)
-                .expect("can perform circuit specific setup");
-        (pk, vk)
-    }
-}
-
 proptest! {
     #![proptest_config(ProptestConfig::with_cases(10))]
 #[test]
 fn groth16_public_input(point in element_strategy()) {
-    let pk = PUBLIC_ELEMENT_INPUT_PK.clone();
-    let vk = PUBLIC_ELEMENT_INPUT_VK.clone();
+    let test_circuit = PublicElementInput {
+        point: Element::GENERATOR,
+    };
+    let (pk, vk) = Groth16::<Bls12_377, LibsnarkReduction>::circuit_specific_setup(test_circuit, &mut OsRng)
+        .expect("can perform circuit specific setup");
     let mut rng = OsRng;
 
     // Prover POV
@@ -611,26 +509,16 @@ impl ConstraintSynthesizer<Fq> for NegationCircuit {
     }
 }
 
-impl NegationCircuit {
-    fn generate_test_parameters() -> (ProvingKey<Bls12_377>, VerifyingKey<Bls12_377>) {
-        let point = Element::GENERATOR;
-        let circuit = NegationCircuit {
-            pos: Element::GENERATOR,
-            public_neg: point.negate(),
-        };
-        let (pk, vk) =
-            Groth16::<Bls12_377, LibsnarkReduction>::circuit_specific_setup(circuit, &mut OsRng)
-                .expect("can perform circuit specific setup");
-        (pk, vk)
-    }
-}
-
 proptest! {
     #![proptest_config(ProptestConfig::with_cases(10))]
 #[test]
 fn groth16_negation(point in element_strategy()) {
-    let pk = NEGATION_PK.clone();
-    let vk = NEGATION_VK.clone();
+    let test_circuit = NegationCircuit {
+        pos: Element::GENERATOR,
+        public_neg: point.negate(),
+    };
+    let (pk, vk) = Groth16::<Bls12_377, LibsnarkReduction>::circuit_specific_setup(test_circuit, &mut OsRng)
+        .expect("can perform circuit specific setup");
     let mut rng = OsRng;
 
     // Prover POV
@@ -691,29 +579,20 @@ impl ConstraintSynthesizer<Fq> for AddAssignAddCircuit {
     }
 }
 
-impl AddAssignAddCircuit {
-    fn generate_test_parameters() -> (ProvingKey<Bls12_377>, VerifyingKey<Bls12_377>) {
-        let test_a = Element::GENERATOR;
-        let test_b = Element::GENERATOR * Fr::from(2u64);
-        let circuit = AddAssignAddCircuit {
-            a: test_a,
-            b: test_b,
-            c: test_a + test_b,
-            d: test_a - test_b,
-        };
-        let (pk, vk) =
-            Groth16::<Bls12_377, LibsnarkReduction>::circuit_specific_setup(circuit, &mut OsRng)
-                .expect("can perform circuit specific setup");
-        (pk, vk)
-    }
-}
-
 proptest! {
     #![proptest_config(ProptestConfig::with_cases(10))]
 #[test]
 fn groth16_add_addassign(a in element_strategy(), b in element_strategy()) {
-    let pk = ADD_ASSIGN_ADD_PK.clone();
-    let vk = ADD_ASSIGN_ADD_VK.clone();
+    let test_a = Element::GENERATOR;
+    let test_b = Element::GENERATOR * Fr::from(2u64);
+    let test_circuit = AddAssignAddCircuit {
+        a: test_a,
+        b: test_b,
+        c: test_a + test_b,
+        d: test_a - test_b,
+    };
+    let (pk, vk) = Groth16::<Bls12_377, LibsnarkReduction>::circuit_specific_setup(test_circuit, &mut OsRng)
+        .expect("can perform circuit specific setup");
     let mut rng = OsRng;
 
     // Prover POV
@@ -737,82 +616,4 @@ fn groth16_add_addassign(a in element_strategy(), b in element_strategy()) {
 
     assert!(proof_result);
 }
-}
-
-fn write_params(
-    target_dir: &PathBuf,
-    name: &str,
-    pk: &ProvingKey<Bls12_377>,
-    vk: &VerifyingKey<Bls12_377>,
-) -> anyhow::Result<()> {
-    let pk_location = target_dir.join(format!("{}_pk.bin", name));
-    let vk_location = target_dir.join(format!("{}_vk.param", name));
-
-    let pk_file = fs::File::create(&pk_location)?;
-    let vk_file = fs::File::create(&vk_location)?;
-
-    let pk_writer = BufWriter::new(pk_file);
-    let vk_writer = BufWriter::new(vk_file);
-
-    ProvingKey::serialize_uncompressed(pk, pk_writer).expect("can serialize ProvingKey");
-    VerifyingKey::serialize_uncompressed(vk, vk_writer).expect("can serialize VerifyingKey");
-
-    Ok(())
-}
-
-#[ignore]
-#[test]
-fn generate_test_vectors() {
-    let (pk, vk) = DiscreteLogCircuit::generate_test_parameters();
-    write_params(
-        &PathBuf::from("tests/test_vectors"),
-        "discrete_log",
-        &pk,
-        &vk,
-    )
-    .expect("can write test vectors");
-
-    let (pk, vk) = CompressionCircuit::generate_test_parameters();
-    write_params(
-        &PathBuf::from("tests/test_vectors"),
-        "compression",
-        &pk,
-        &vk,
-    )
-    .expect("can write test vectors");
-
-    let (pk, vk) = DecompressionCircuit::generate_test_parameters();
-    write_params(
-        &PathBuf::from("tests/test_vectors"),
-        "decompression",
-        &pk,
-        &vk,
-    )
-    .expect("can write test vectors");
-
-    let (pk, vk) = ElligatorCircuit::generate_test_parameters();
-    write_params(&PathBuf::from("tests/test_vectors"), "elligator", &pk, &vk)
-        .expect("can write test vectors");
-
-    let (pk, vk) = PublicElementInput::generate_test_parameters();
-    write_params(
-        &PathBuf::from("tests/test_vectors"),
-        "public_element_input",
-        &pk,
-        &vk,
-    )
-    .expect("can write test vectors");
-
-    let (pk, vk) = NegationCircuit::generate_test_parameters();
-    write_params(&PathBuf::from("tests/test_vectors"), "negation", &pk, &vk)
-        .expect("can write test vectors");
-
-    let (pk, vk) = AddAssignAddCircuit::generate_test_parameters();
-    write_params(
-        &PathBuf::from("tests/test_vectors"),
-        "add_assign_add",
-        &pk,
-        &vk,
-    )
-    .expect("can write test vectors");
 }

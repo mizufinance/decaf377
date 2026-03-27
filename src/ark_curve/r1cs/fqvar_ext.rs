@@ -1,11 +1,12 @@
-use ark_r1cs_std::eq::EqGadget;
-use ark_r1cs_std::prelude::{AllocVar, Boolean, FieldVar};
-use ark_r1cs_std::select::CondSelectGadget;
-use ark_r1cs_std::{R1CSVar, ToBitsGadget};
-use ark_relations::r1cs::SynthesisError;
-
 use crate::ark_curve::{constants::ZETA, r1cs::FqVar};
 use crate::Fq;
+use ark_r1cs_std::eq::EqGadget;
+use ark_r1cs_std::prelude::ToBitsGadget;
+use ark_r1cs_std::prelude::{AllocVar, Boolean, FieldVar};
+use ark_r1cs_std::select::CondSelectGadget;
+use ark_r1cs_std::R1CSVar;
+use ark_relations::r1cs::SynthesisError;
+use Boolean::*;
 
 pub trait FqVarExtension: Sized {
     fn isqrt(&self) -> Result<(Boolean<Fq>, FqVar), SynthesisError>;
@@ -16,6 +17,10 @@ pub trait FqVarExtension: Sized {
     fn is_negative(&self) -> Result<Boolean<Fq>, SynthesisError>;
     fn is_nonnegative(&self) -> Result<Boolean<Fq>, SynthesisError>;
     fn abs(self) -> Result<Self, SynthesisError>;
+    fn not(boolean: &Boolean<Fq>) -> Result<Boolean<Fq>, SynthesisError>;
+    fn not_in_place(boolean: Boolean<Fq>) -> Result<Boolean<Fq>, SynthesisError>;
+    fn and(a: &Boolean<Fq>, b: &Boolean<Fq>) -> Result<Boolean<Fq>, SynthesisError>;
+    fn or(a: &Boolean<Fq>, b: &Boolean<Fq>) -> Result<Boolean<Fq>, SynthesisError>;
 }
 
 impl FqVarExtension for FqVar {
@@ -55,27 +60,29 @@ impl FqVarExtension for FqVar {
         y_squared_var.conditional_enforce_equal(&den_var_inv, &in_case_1)?;
 
         // Case 3: `(false, 0)` if `den` is zero
-        let was_not_square_var = was_square_var.not();
-        let in_case_3 = was_not_square_var.and(&den_var_is_zero)?;
+
+        let was_not_square_var = Self::not(&was_square_var)?;
+        let in_case_3 = Self::and(&was_not_square_var, &den_var_is_zero)?;
         // Certify the return value y is 0 when we're in case 3.
         y_squared_var.conditional_enforce_equal(&FqVar::zero(), &in_case_3)?;
 
         // Case 4: `(false, sqrt(zeta*num/den))` if `num` and `den` are both nonzero and `num/den` is nonsquare;
         let zeta_var = FqVar::new_constant(cs, ZETA)?;
         let zeta_times_one_over_den_var = zeta_var * den_var_inv;
-        let in_case_4 = was_not_square_var.and(&den_var_is_zero.not())?;
+        let is_den_var_is_zero = Self::not(&den_var_is_zero)?;
+        let in_case_4 = Self::and(&was_not_square_var, &is_den_var_is_zero)?;
         // Certify the return value y is sqrt(zeta * 1/den)
         y_squared_var.conditional_enforce_equal(&zeta_times_one_over_den_var, &in_case_4)?;
 
         // Ensure that we are in case 1, 3, or 4.
-        let in_case = in_case_1.or(&in_case_3)?.or(&in_case_4)?;
+        let in_case = Self::or(&in_case_1, &Self::or(&in_case_3, &in_case_4)?)?;
         in_case.enforce_equal(&Boolean::TRUE)?;
 
         Ok((was_square_var, y_var))
     }
 
     fn is_negative(&self) -> Result<Boolean<Fq>, SynthesisError> {
-        Ok(self.is_nonnegative()?.not())
+        Ok(Self::not(&self.is_nonnegative()?)?)
     }
 
     fn is_nonnegative(&self) -> Result<Boolean<Fq>, SynthesisError> {
@@ -86,7 +93,7 @@ impl FqVarExtension for FqVar {
         let false_var = Boolean::<Fq>::FALSE;
 
         // Check least significant bit
-        let lhs = bitvars[0].and(&true_var)?;
+        let lhs = Self::and(&bitvars[0], &true_var)?;
         let is_nonnegative_var = lhs.is_eq(&false_var)?;
 
         Ok(is_nonnegative_var)
@@ -96,5 +103,39 @@ impl FqVarExtension for FqVar {
         let absolute_value =
             FqVar::conditionally_select(&self.is_nonnegative()?, &self, &self.negate()?)?;
         Ok(absolute_value)
+    }
+
+    // The methods for logical operations (and, or, not) were moved from the Boolean
+    // enum to helper functions in AllocatedBool. Consequently, we need to do some
+    // cursed redirection for the the Boolean enum to delegate these operations to the
+    // underlying AllocatedBool when applicable.
+    fn not(boolean: &Boolean<Fq>) -> Result<Boolean<Fq>, SynthesisError> {
+        Ok(Self::not_in_place(boolean.clone())?)
+    }
+
+    fn not_in_place(mut boolean: Boolean<Fq>) -> Result<Boolean<Fq>, SynthesisError> {
+        match &mut boolean {
+            Boolean::Constant(c) => *c = !*c,
+            Boolean::Var(v) => *v = v.not()?,
+        }
+        Ok(boolean)
+    }
+
+    fn and(a: &Boolean<Fq>, b: &Boolean<Fq>) -> Result<Boolean<Fq>, SynthesisError> {
+        match (a, b) {
+            // false AND x is always false
+            (&Constant(false), _) | (_, &Constant(false)) => Ok(Constant(false)),
+            // true AND x is always x
+            (&Constant(true), x) | (x, &Constant(true)) => Ok(x.clone()),
+            (Var(ref x), Var(ref y)) => Ok(Var(x.and(y)?)),
+        }
+    }
+
+    fn or(a: &Boolean<Fq>, b: &Boolean<Fq>) -> Result<Boolean<Fq>, SynthesisError> {
+        match (a, b) {
+            (&Constant(false), x) | (x, &Constant(false)) => Ok(x.clone()),
+            (&Constant(true), _) | (_, &Constant(true)) => Ok(Constant(true)),
+            (Var(ref x), Var(ref y)) => Ok(Var(x.or(y)?)),
+        }
     }
 }

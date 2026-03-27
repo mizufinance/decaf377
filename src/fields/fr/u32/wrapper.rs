@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use super::{
     super::{B, N_32, N_64, N_8},
     fiat,

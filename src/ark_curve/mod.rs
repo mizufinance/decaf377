@@ -20,4 +20,3 @@ mod on_curve;
 #[cfg(feature = "r1cs")]
 pub mod r1cs;
 
-pub use bls12_377::Bls12_377;

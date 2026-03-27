@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use subtle::{Choice, ConditionallySelectable, ConstantTimeEq};
 
 use super::{
