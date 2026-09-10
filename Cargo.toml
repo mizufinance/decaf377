@@ -69,6 +69,10 @@ arkworks = [
 ]
 r1cs = ["arkworks", "ark-groth16", "ark-r1cs-std", "ark-relations", "ark-snark"]
 u32_backend = []
+risc0 = ["dep:risc0-bigint2"]
+
+[target.'cfg(target_os = "zkvm")'.dependencies]
+risc0-bigint2 = { version = "=1.4.14", optional = true, default-features = false }
 
 [dev-dependencies]
 proptest = "1"

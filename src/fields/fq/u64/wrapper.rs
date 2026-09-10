@@ -7,6 +7,10 @@ use super::super::{N_64, N_8};
 
 const N: usize = N_64;
 
+#[cfg(any(all(feature = "risc0", target_os = "zkvm"), test))]
+#[path = "accelerated.rs"]
+mod accelerated;
+
 #[derive(Copy, Clone)]
 pub struct Fq(ArkworksFq);
 
@@ -31,6 +35,9 @@ impl zeroize::Zeroize for Fq {
 
 impl Fq {
     pub(crate) fn from_le_limbs(limbs: [u64; N_64]) -> Fq {
+        if let Some(value) = ArkworksFq::from_bigint(BigInt(limbs)) {
+            return Self(value);
+        }
         let mut bytes = [0u8; N_8];
         for i in 0..N_64 {
             let this_byte = limbs[i].to_le_bytes();
@@ -98,17 +105,23 @@ impl Fq {
 
     pub fn square(&self) -> Fq {
         debug_assert!(!self.is_sentinel());
+        #[cfg(all(feature = "risc0", target_os = "zkvm"))]
+        return accelerated::mul(*self, self);
+        #[cfg(not(all(feature = "risc0", target_os = "zkvm")))]
         Fq(self.0.square())
     }
 
     pub fn inverse(&self) -> Option<Fq> {
         debug_assert!(!self.is_sentinel());
-
-        if self == &Fq::ZERO {
-            return None;
+        #[cfg(all(feature = "risc0", target_os = "zkvm"))]
+        return accelerated::inverse(*self);
+        #[cfg(not(all(feature = "risc0", target_os = "zkvm")))]
+        {
+            if self == &Fq::ZERO {
+                return None;
+            }
+            Some(Fq(self.0.inverse()?))
         }
-
-        Some(Fq(self.0.inverse()?))
     }
 
     pub fn add(self, other: &Fq) -> Fq {
@@ -123,6 +136,9 @@ impl Fq {
 
     pub fn mul(self, other: &Fq) -> Fq {
         debug_assert!(!self.is_sentinel() && !other.is_sentinel());
+        #[cfg(all(feature = "risc0", target_os = "zkvm"))]
+        return accelerated::mul(self, other);
+        #[cfg(not(all(feature = "risc0", target_os = "zkvm")))]
         Fq(self.0 * other.0)
     }
 
@@ -154,5 +170,31 @@ impl ConstantTimeEq for Fq {
             is_equal &= self_limbs[i] == other_limbs[i];
         }
         Choice::from(is_equal as u8)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ark_std::{vec, vec::Vec};
+
+    #[test]
+    fn limb_conversion_matches_modular_byte_conversion() {
+        let mut values = vec![[0; 4], [1, 0, 0, 0], Fq::MODULUS_LIMBS, [u64::MAX; 4]];
+        let mut below_modulus = Fq::MODULUS_LIMBS;
+        below_modulus[0] -= 1;
+        values.push(below_modulus);
+        for seed in 0..256u64 {
+            values.push(core::array::from_fn(|i| {
+                seed.wrapping_mul(0x9e3779b97f4a7c15u64.wrapping_add(i as u64))
+            }));
+        }
+        for limbs in values {
+            let bytes: Vec<u8> = limbs.iter().flat_map(|limb| limb.to_le_bytes()).collect();
+            assert_eq!(
+                Fq::from_le_limbs(limbs).0,
+                ArkworksFq::from_le_bytes_mod_order(&bytes)
+            );
+        }
     }
 }

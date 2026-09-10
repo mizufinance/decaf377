@@ -24,26 +24,26 @@ struct SquareRootTables {
 
 impl SquareRootTables {
     fn new() -> Self {
-        let mut s_lookup = HashMap::new();
+        let mut s_lookup = HashMap::with_capacity(256);
+        let step = G
+            .pow(BigInteger256::from(2u64.pow(N - SQRT_W)))
+            .inverse()
+            .expect("inverse exists for these elements");
+        let mut value = *ONE;
         for nu in 0..256 {
-            // These entries should be g**(-1 * nu * 2**(n-w)) so:
-            // 1. We compute g**(nu * 2**(n-w))
-            // 2. Then take the inverse of the quantity from step 1
-            let exp: BigInteger256 = (nu * 2u64.pow(N - SQRT_W)).into();
-            let g_inv = G.pow(exp);
-            s_lookup.insert(
-                g_inv.inverse().expect("inverse exists for these elements"),
-                nu,
-            );
+            s_lookup.insert(value, nu);
+            value *= step;
         }
 
         let powers_of_two = [0, 8, 16, 24, 32, 40];
         let mut gtab = Vec::new();
         for power_of_two in powers_of_two {
-            let mut gtab_i = Vec::<Fq>::new();
-            for nu in 0..256 {
-                let exp: BigInteger256 = (nu * 2u64.pow(power_of_two)).into();
-                gtab_i.push(G.pow(exp))
+            let mut gtab_i = Vec::<Fq>::with_capacity(256);
+            let step = G.pow(BigInteger256::from(2u64.pow(power_of_two)));
+            let mut value = *ONE;
+            for _ in 0..256 {
+                gtab_i.push(value);
+                value *= step;
             }
             gtab.push(gtab_i);
         }
@@ -172,6 +172,30 @@ mod tests {
     use crate::ark_curve::constants::ZETA;
 
     use proptest::prelude::*;
+
+    #[test]
+    fn lookup_tables_match_their_defining_powers() {
+        let tables = SquareRootTables::new();
+        assert_eq!(tables.s_lookup.len(), 256);
+        for nu in 0..256u64 {
+            let exponent: BigInteger256 = (nu * 2u64.pow(N - SQRT_W)).into();
+            let key = G.pow(exponent).inverse().unwrap();
+            assert_eq!(tables.s_lookup.get(&key), Some(&nu));
+        }
+        for (power, table) in [
+            (0, &tables.g0),
+            (8, &tables.g8),
+            (16, &tables.g16),
+            (24, &tables.g24),
+            (32, &tables.g32),
+            (40, &tables.g40),
+        ] {
+            for nu in 0..256u64 {
+                let exponent: BigInteger256 = (nu * 2u64.pow(power)).into();
+                assert_eq!(table[nu as usize], G.pow(exponent));
+            }
+        }
+    }
 
     fn fq_strategy() -> BoxedStrategy<Fq> {
         any::<[u8; 32]>()
