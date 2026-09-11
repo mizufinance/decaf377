@@ -52,6 +52,12 @@ fn affine_and_bigint_paths_match_projective_results() {
         let limbs = s.into_bigint();
         assert_eq!(g.mul_bigint(limbs), expected);
         assert_eq!(affine.mul_bigint(limbs), expected);
+        let mut scalar = s;
+        assert_eq!(g * &mut scalar, expected);
+        let mut assigned = g;
+        assigned *= &mut scalar;
+        assert_eq!(assigned, expected);
+        assert_eq!(scalar, s);
     }
     // Integer APIs must not truncate to the 251-bit scalar-field width.
     let limbs = [0, 0, 0, 1u64 << 63];

@@ -313,8 +313,6 @@ impl<'a> Mul<&'a mut Fr> for Element {
 
 impl<'a> MulAssign<&'a mut Fr> for Element {
     fn mul_assign(&mut self, point: &'a mut Fr) {
-        let mut p = self.inner;
-        p *= *point;
-        *self = Element { inner: p }
+        *self *= &*point;
     }
 }
