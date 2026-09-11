@@ -103,13 +103,8 @@ impl Neg for Element {
 }
 
 impl<'b> MulAssign<&'b Fr> for Element {
-    // Scalar multiplication is performed through the implementation
-    // of `MulAssign` on `ProjectiveDecaf377` which is a type alias for
-    // `Group<EdwardsConfig>`.
     fn mul_assign(&mut self, point: &'b Fr) {
-        let mut p = self.inner;
-        p *= *point;
-        *self = Element { inner: p }
+        *self = self.scalar_mul(&point.to_le_limbs());
     }
 }
 
@@ -123,9 +118,7 @@ impl<'a, 'b> Mul<&'b Fr> for &'a Element {
     type Output = Element;
 
     fn mul(self, point: &'b Fr) -> Element {
-        let mut p = self.inner;
-        p *= *point;
-        Element { inner: p }
+        self.scalar_mul(&point.to_le_limbs())
     }
 }
 
@@ -314,9 +307,7 @@ impl<'a> Mul<&'a mut Fr> for Element {
     type Output = Element;
 
     fn mul(self, point: &'a mut Fr) -> Self::Output {
-        let mut p = self.inner;
-        p *= *point;
-        Element { inner: p }
+        self.scalar_mul(&point.to_le_limbs())
     }
 }
 

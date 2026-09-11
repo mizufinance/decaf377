@@ -43,3 +43,25 @@ cargo bench
 ```
 
 This will generate a report at `target/criterion/report/index.html`.
+
+## Scalar multiplication
+
+`Element` and `AffinePoint` scalar operators use a fixed-schedule extended
+Edwards implementation over the existing 32-bit Fiat field arithmetic, even
+when the public types use the Arkworks backend. Raw Montgomery bridges avoid
+Arkworks field reduction during conversion; affine output uses fixed-exponent
+inversion. `Fr` serialization also uses the Fiat conversion. No wire encoding
+or scalar-field modulus changes.
+
+`PrimeGroup::mul_bigint`, `AffineRepr::mul_bigint`, and the minimal backend's
+`scalar_mul` process every supplied limb; the limb count must be public.
+Ordinary `Fr` operators process four limbs. Explicitly variable-time APIs are
+for public inputs. General Arkworks field operations, batch normalization,
+point compression, and other surrounding cryptographic operations are outside
+this multiplication guarantee and must be reviewed separately for secret use.
+
+This contract applies to optimized builds without debug assertions and the
+usual constant-time integer-instruction assumptions. It is not a formal
+compiled-code proof or a claim of physical power/EM resistance. The independent
+algebraic/encoding tests and `cargo run --release --example scalar_timing`
+provide functional and timing regression evidence, not a constant-time proof.

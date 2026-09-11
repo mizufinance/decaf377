@@ -7,6 +7,7 @@ use crate::EncodingError;
 pub mod arkworks;
 mod ops;
 mod u32;
+pub(crate) use u32::wrapper::Fq as CtFq;
 
 // The u64 backend requires arkworks
 #[cfg(feature = "arkworks")]

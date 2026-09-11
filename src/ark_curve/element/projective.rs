@@ -12,6 +12,16 @@ pub struct Element {
 }
 
 impl Element {
+    pub(crate) fn scalar_mul(&self, limbs: &[u64]) -> Self {
+        let p = self.inner;
+        let [x, y, z, t] = crate::scalar_mul::Point::from_projective([p.x, p.y, p.z, p.t])
+            .mul(limbs)
+            .projective();
+        Self {
+            inner: EdwardsProjective::new_unchecked(x, y, t, z),
+        }
+    }
+
     /// Return the conventional generator for `decaf377`.
     pub const GENERATOR: Self = Self {
         inner: EdwardsProjective::new_unchecked(B_X, B_Y, B_T, B_Z),
@@ -21,9 +31,7 @@ impl Element {
         inner: EdwardsProjective::new_unchecked(Fq::ZERO, Fq::ONE, Fq::ZERO, Fq::ONE),
     };
 
-    pub const ZERO: Self = Self {
-        inner: EdwardsProjective::new_unchecked(Fq::ZERO, Fq::ZERO, Fq::ZERO, Fq::ZERO),
-    };
+    pub const ZERO: Self = Self::IDENTITY;
 }
 
 impl Hash for Element {

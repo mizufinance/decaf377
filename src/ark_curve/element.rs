@@ -102,8 +102,11 @@ impl AffineRepr for AffinePoint {
     }
 
     fn mul_bigint(&self, other: impl AsRef<[u64]>) -> Self::Group {
+        let [x, y, z, t] = crate::scalar_mul::Point::from_affine(self.inner.x, self.inner.y)
+            .mul(other.as_ref())
+            .projective();
         Element {
-            inner: self.inner.mul_bigint(other),
+            inner: EdwardsProjective::new_unchecked(x, y, t, z),
         }
     }
 
@@ -119,33 +122,33 @@ impl AffineRepr for AffinePoint {
 
 impl From<Element> for AffinePoint {
     fn from(point: Element) -> Self {
+        let p = point.inner;
+        let [x, y] = crate::scalar_mul::Point::from_projective([p.x, p.y, p.z, p.t]).affine();
         Self {
-            inner: point.inner.into(),
+            inner: EdwardsAffine::new_unchecked(x, y),
         }
     }
 }
 
 impl From<AffinePoint> for Element {
     fn from(point: AffinePoint) -> Self {
+        let [x, y, z, t] =
+            crate::scalar_mul::Point::from_affine(point.inner.x, point.inner.y).projective();
         Self {
-            inner: point.inner.into(),
+            inner: EdwardsProjective::new_unchecked(x, y, t, z),
         }
     }
 }
 
 impl From<&Element> for AffinePoint {
     fn from(point: &Element) -> Self {
-        Self {
-            inner: point.inner.into(),
-        }
+        (*point).into()
     }
 }
 
 impl From<&AffinePoint> for Element {
     fn from(point: &AffinePoint) -> Self {
-        Self {
-            inner: point.inner.into(),
-        }
+        (*point).into()
     }
 }
 
@@ -157,8 +160,7 @@ impl PrimeGroup for Element {
     }
 
     fn mul_bigint(&self, other: impl AsRef<[u64]>) -> Self {
-        let inner = self.inner.mul_bigint(other);
-        Element { inner }
+        self.scalar_mul(other.as_ref())
     }
 }
 

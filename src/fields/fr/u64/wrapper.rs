@@ -1,6 +1,5 @@
 use ark_ed_on_bls12_377::Fr as ArkworksFr;
 use ark_ff::{biginteger::BigInt, Field, PrimeField};
-use ark_serialize::CanonicalSerialize;
 
 use super::super::{N_64, N_8};
 
@@ -59,11 +58,8 @@ impl Fr {
     }
 
     pub fn to_bytes_le(&self) -> [u8; N_8] {
-        let mut bytes = [0u8; 32];
-        self.0
-            .serialize_compressed(&mut bytes[..])
-            .expect("serialization into array should be infallible");
-        bytes
+        // Both backends store canonical Montgomery residues with R = 2^256.
+        super::super::u32::wrapper::Fr::from_montgomery_limbs(self.0 .0 .0).to_bytes_le()
     }
 
     pub(crate) const fn from_montgomery_limbs(limbs: [u64; N]) -> Fr {

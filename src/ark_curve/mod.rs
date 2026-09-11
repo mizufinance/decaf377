@@ -19,4 +19,3 @@ mod on_curve;
 
 #[cfg(feature = "r1cs")]
 pub mod r1cs;
-

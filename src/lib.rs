@@ -6,6 +6,7 @@ use cfg_if::cfg_if;
 
 pub mod fields;
 pub use fields::{fp::Fp, fq::Fq, fr::Fr};
+mod scalar_mul;
 mod sign;
 
 mod error;
