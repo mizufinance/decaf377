@@ -1,5 +1,7 @@
 use ark_ed_on_bls12_377::Fr as ArkworksFr;
-use ark_ff::{biginteger::BigInt, Field, PrimeField};
+use ark_ff::biginteger::BigInt;
+
+use subtle::ConstantTimeEq;
 
 use super::super::{N_64, N_8};
 
@@ -10,7 +12,7 @@ pub struct Fr(ArkworksFr);
 
 impl PartialEq for Fr {
     fn eq(&self, other: &Self) -> bool {
-        self.0 == other.0
+        bool::from(self.0 .0 .0.ct_eq(&other.0 .0 .0))
     }
 }
 
@@ -23,6 +25,15 @@ impl zeroize::Zeroize for Fr {
 }
 
 impl Fr {
+    // Both representations use canonical Montgomery residues with R = 2^256.
+    fn as_ct(&self) -> super::super::u32::wrapper::Fr {
+        super::super::u32::wrapper::Fr::from_montgomery_limbs(self.0 .0 .0)
+    }
+
+    fn from_ct(value: super::super::u32::wrapper::Fr) -> Self {
+        Self::from_montgomery_limbs(value.to_montgomery_limbs())
+    }
+
     pub(crate) fn from_le_limbs(limbs: [u64; N_64]) -> Fr {
         let mut bytes = [0u8; N_8];
         for i in 0..N_64 {
@@ -36,7 +47,7 @@ impl Fr {
     }
 
     pub(crate) fn from_raw_bytes(bytes: &[u8; N_8]) -> Fr {
-        Self(ArkworksFr::from_le_bytes_mod_order(bytes))
+        Self::from_ct(super::super::u32::wrapper::Fr::from_raw_bytes(bytes))
     }
 
     pub(crate) fn to_le_limbs(&self) -> [u64; N_64] {
@@ -58,8 +69,7 @@ impl Fr {
     }
 
     pub fn to_bytes_le(&self) -> [u8; N_8] {
-        // Both backends store canonical Montgomery residues with R = 2^256.
-        super::super::u32::wrapper::Fr::from_montgomery_limbs(self.0 .0 .0).to_bytes_le()
+        self.as_ct().to_bytes_le()
     }
 
     pub(crate) const fn from_montgomery_limbs(limbs: [u64; N]) -> Fr {
@@ -70,30 +80,26 @@ impl Fr {
     pub const ONE: Self = Self(ArkworksFr::new(BigInt::one()));
 
     pub fn square(&self) -> Fr {
-        Fr(self.0.square())
+        Self::from_ct(self.as_ct().square())
     }
 
     pub fn inverse(&self) -> Option<Fr> {
-        if self == &Self::ZERO {
-            return None;
-        }
-
-        Some(Fr(self.0.inverse()?))
+        self.as_ct().inverse().map(Self::from_ct)
     }
 
     pub fn add(self, other: &Fr) -> Fr {
-        Fr(self.0 + other.0)
+        Self::from_ct(self.as_ct().add(&other.as_ct()))
     }
 
     pub fn sub(self, other: &Fr) -> Fr {
-        Fr(self.0 - other.0)
+        Self::from_ct(self.as_ct().sub(&other.as_ct()))
     }
 
     pub fn mul(self, other: &Fr) -> Fr {
-        Fr(self.0 * other.0)
+        Self::from_ct(self.as_ct().mul(&other.as_ct()))
     }
 
     pub fn neg(self) -> Fr {
-        Fr(-self.0)
+        Self::from_ct(self.as_ct().neg())
     }
 }

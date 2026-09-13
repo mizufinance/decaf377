@@ -4,27 +4,17 @@ use subtle::{Choice, ConditionallySelectable, ConstantTimeEq};
 
 use super::{
     super::{B, N_32, N_64, N_8},
-    fiat,
+    generated as fiat,
 };
 
 const N: usize = N_32;
 
 #[derive(Copy, Clone)]
-pub struct Fq(fiat::FqMontgomeryDomainFieldElement);
+pub struct Fq([u32; N]);
 
 impl PartialEq for Fq {
     fn eq(&self, other: &Self) -> bool {
-        match (self.is_sentinel(), other.is_sentinel()) {
-            (true, true) => true,
-            (true, false) => false,
-            (false, true) => false,
-            (false, false) => {
-                let sub = self.sub(other);
-                let mut check_word = 0;
-                fiat::fq_nonzero(&mut check_word, &sub.0 .0);
-                check_word == 0
-            }
-        }
+        bool::from(self.0.ct_eq(&other.0))
     }
 }
 
@@ -32,40 +22,38 @@ impl Eq for Fq {}
 
 impl zeroize::Zeroize for Fq {
     fn zeroize(&mut self) {
-        self.0 .0.zeroize()
+        self.0.zeroize()
     }
 }
 
 impl Fq {
     pub(crate) fn from_le_limbs(limbs: [u64; N_64]) -> Fq {
-        let limbs = {
-            let mut out = [0u32; N];
-            for i in 0..N_64 {
-                out[2 * i] = (limbs[i] & 0xFFFF_FFFF_FFFF_FFFF) as u32;
-                out[2 * i + 1] = (limbs[i] >> 32) as u32;
-            }
-            out
-        };
-        let x_non_monty = fiat::FqNonMontgomeryDomainFieldElement(limbs);
-        let mut x = fiat::FqMontgomeryDomainFieldElement([0; N]);
-        fiat::fq_to_montgomery(&mut x, &x_non_monty);
-        Self(x)
+        let mut bytes = [0u8; N_8];
+        for (i, limb) in limbs.iter().enumerate() {
+            bytes[8 * i..8 * i + 8].copy_from_slice(&limb.to_le_bytes());
+        }
+        Self::from_raw_bytes(&bytes)
     }
 
     pub(crate) fn from_raw_bytes(bytes: &[u8; N_8]) -> Fq {
-        let mut x_non_montgomery = fiat::FqNonMontgomeryDomainFieldElement([0; N]);
-        let mut x = fiat::FqMontgomeryDomainFieldElement([0; N]);
-
-        fiat::fq_from_bytes(&mut x_non_montgomery.0, &bytes);
-        fiat::fq_to_montgomery(&mut x, &x_non_montgomery);
-
-        Self(x)
+        // The input spans all 256-bit values. Keep every Fiat operand reduced.
+        let mut result = Self::ZERO;
+        for byte in bytes.iter().rev() {
+            for bit in (0..8).rev() {
+                let doubled = result.add(&result);
+                let incremented = doubled.add(&Self::ONE);
+                let mut out = [0u32; N];
+                fiat::fq_selectznz(&mut out, (byte >> bit) & 1, &doubled.0, &incremented.0);
+                result = Self(out);
+            }
+        }
+        result
     }
 
     pub(crate) fn to_montgomery_limbs(&self) -> [u64; N_64] {
         let mut out = [0u64; N_64];
         for (i, limb) in out.iter_mut().enumerate() {
-            *limb = self.0 .0[2 * i] as u64 | ((self.0 .0[2 * i + 1] as u64) << 32);
+            *limb = self.0[2 * i] as u64 | ((self.0[2 * i + 1] as u64) << 32);
         }
         out
     }
@@ -73,9 +61,9 @@ impl Fq {
     pub(crate) fn to_le_limbs(&self) -> [u64; N_64] {
         debug_assert!(!self.is_sentinel());
 
-        let mut x_non_montgomery = fiat::FqNonMontgomeryDomainFieldElement([0; N]);
+        let mut x_non_montgomery = [0; N];
         fiat::fq_from_montgomery(&mut x_non_montgomery, &self.0);
-        let limbs = x_non_montgomery.0;
+        let limbs = x_non_montgomery;
         let mut out = [0u64; N_64];
         for i in 0..N_64 {
             out[i] = (limbs[2 * i] as u64) | ((limbs[2 * i + 1] as u64) << 32);
@@ -87,21 +75,23 @@ impl Fq {
         debug_assert!(!self.is_sentinel());
 
         let mut bytes = [0u8; N_8];
-        let mut x_non_montgomery = fiat::FqNonMontgomeryDomainFieldElement([0; N]);
+        let mut x_non_montgomery = [0; N];
         fiat::fq_from_montgomery(&mut x_non_montgomery, &self.0);
-        fiat::fq_to_bytes(&mut bytes, &x_non_montgomery.0);
+        fiat::fq_to_bytes(&mut bytes, &x_non_montgomery);
         bytes
     }
 
     const fn from_montgomery_limbs_backend(limbs: [u32; N]) -> Fq {
-        Self(fiat::FqMontgomeryDomainFieldElement(limbs))
+        Self(limbs)
     }
 
     /// Instantiate a constant field element from its montgomery limbs.
     ///
     /// This should only be used if you are familiar with the internals of the library.
+    /// Arithmetic requires a canonical Montgomery residue strictly below the modulus.
+    /// `SENTINEL` supports equality only; arithmetic on it is undefined.
     pub const fn from_montgomery_limbs(limbs: [u64; N_64]) -> Fq {
-        Self(fiat::FqMontgomeryDomainFieldElement([
+        Self([
             limbs[0] as u32,
             (limbs[0] >> 32) as u32,
             limbs[1] as u32,
@@ -110,14 +100,14 @@ impl Fq {
             (limbs[2] >> 32) as u32,
             limbs[3] as u32,
             (limbs[3] >> 32) as u32,
-        ]))
+        ])
     }
 
-    pub const ZERO: Self = Self(fiat::FqMontgomeryDomainFieldElement([0; N]));
+    pub const ZERO: Self = Self([0; N]);
 
-    pub const ONE: Self = Self(fiat::FqMontgomeryDomainFieldElement([
+    pub const ONE: Self = Self([
         4294967283, 2099019775, 1879048178, 1918366991, 1361842158, 383260021, 733715101, 223074866,
-    ]));
+    ]);
     ///
     /// A sentinel value which exists only to not be equal to any other field element.
     ///
@@ -125,13 +115,13 @@ impl Fq {
     pub const SENTINEL: Self = Self::from_montgomery_limbs([u64::MAX; N_64]);
 
     fn is_sentinel(&self) -> bool {
-        self.0 .0 == Self::SENTINEL.0 .0
+        self.0 == Self::SENTINEL.0
     }
 
     pub fn square(&self) -> Fq {
         debug_assert!(!self.is_sentinel());
 
-        let mut result = fiat::FqMontgomeryDomainFieldElement([0; N]);
+        let mut result = [0; N];
         fiat::fq_square(&mut result, &self.0);
         Self(result)
     }
@@ -145,14 +135,14 @@ impl Fq {
 
         const I: usize = (49 * B + 57) / 17;
 
-        let mut a = fiat::FqNonMontgomeryDomainFieldElement([0; N]);
+        let mut a = [0; N];
         fiat::fq_from_montgomery(&mut a, &self.0);
         let mut d = 1;
         let mut f: [u32; N + 1] = [0u32; N + 1];
         fiat::fq_msat(&mut f);
         let mut g: [u32; N + 1] = [0u32; N + 1];
         let mut v: [u32; N] = [0u32; N];
-        let mut r: [u32; N] = Self::ONE.0 .0;
+        let mut r: [u32; N] = Self::ONE.0;
         let mut i = 0;
         let mut j = 0;
 
@@ -197,21 +187,17 @@ impl Fq {
         }
 
         let s = ((f[f.len() - 1] >> (32 - 1)) & 1) as u8;
-        let mut neg = fiat::FqMontgomeryDomainFieldElement([0; N]);
-        fiat::fq_opp(&mut neg, &fiat::FqMontgomeryDomainFieldElement(v));
+        let mut neg = [0; N];
+        fiat::fq_opp(&mut neg, &v);
 
         let mut v_prime: [u32; N] = [0u32; N];
-        fiat::fq_selectznz(&mut v_prime, s, &v, &neg.0);
+        fiat::fq_selectznz(&mut v_prime, s, &v, &neg);
 
         let mut pre_comp: [u32; N] = [0u32; N];
         fiat::fq_divstep_precomp(&mut pre_comp);
 
-        let mut result = fiat::FqMontgomeryDomainFieldElement([0; N]);
-        fiat::fq_mul(
-            &mut result,
-            &fiat::FqMontgomeryDomainFieldElement(v_prime),
-            &fiat::FqMontgomeryDomainFieldElement(pre_comp),
-        );
+        let mut result = [0; N];
+        fiat::fq_mul(&mut result, &v_prime, &pre_comp);
 
         Some(Fq(result))
     }
@@ -219,7 +205,7 @@ impl Fq {
     pub fn add(self, other: &Fq) -> Fq {
         debug_assert!(!self.is_sentinel() && !other.is_sentinel());
 
-        let mut result = fiat::FqMontgomeryDomainFieldElement([0; N]);
+        let mut result = [0; N];
         fiat::fq_add(&mut result, &self.0, &other.0);
         Fq(result)
     }
@@ -227,7 +213,7 @@ impl Fq {
     pub fn sub(self, other: &Fq) -> Fq {
         debug_assert!(!self.is_sentinel() && !other.is_sentinel());
 
-        let mut result = fiat::FqMontgomeryDomainFieldElement([0; N]);
+        let mut result = [0; N];
         fiat::fq_sub(&mut result, &self.0, &other.0);
         Fq(result)
     }
@@ -235,7 +221,7 @@ impl Fq {
     pub fn mul(self, other: &Fq) -> Fq {
         debug_assert!(!self.is_sentinel() && !other.is_sentinel());
 
-        let mut result = fiat::FqMontgomeryDomainFieldElement([0; N]);
+        let mut result = [0; N];
         fiat::fq_mul(&mut result, &self.0, &other.0);
         Fq(result)
     }
@@ -243,7 +229,7 @@ impl Fq {
     pub fn neg(self) -> Fq {
         debug_assert!(!self.is_sentinel());
 
-        let mut result = fiat::FqMontgomeryDomainFieldElement([0; N]);
+        let mut result = [0; N];
         fiat::fq_opp(&mut result, &self.0);
         Fq(result)
     }
@@ -253,14 +239,14 @@ impl ConditionallySelectable for Fq {
     fn conditional_select(a: &Self, b: &Self, choice: Choice) -> Self {
         let mut out = [0u32; 8];
         for i in 0..8 {
-            out[i] = u32::conditional_select(&a.0 .0[i], &b.0 .0[i], choice);
+            out[i] = u32::conditional_select(&a.0[i], &b.0[i], choice);
         }
-        Self(fiat::FqMontgomeryDomainFieldElement(out))
+        Self(out)
     }
 }
 
 impl ConstantTimeEq for Fq {
     fn ct_eq(&self, other: &Fq) -> Choice {
-        self.0 .0.ct_eq(&other.0 .0)
+        self.0.ct_eq(&other.0)
     }
 }
