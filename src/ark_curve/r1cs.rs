@@ -34,6 +34,6 @@ impl<T> CountConstraints for T where T: ConstraintSynthesizer<Fq> + Sized {}
 
 impl ToConstraintField<Fq> for Element {
     fn to_field_elements(&self) -> Option<Vec<Fq>> {
-        Some([self.vartime_compress_to_field()].to_vec())
+        Some([self.compress_to_field()].to_vec())
     }
 }

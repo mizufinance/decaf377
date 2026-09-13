@@ -55,3 +55,24 @@ fn fixed_schedule_encoding_matches_existing_wire_encoding() {
         check(Element::hash_to_curve(&r1, &r2));
     }
 }
+
+#[cfg(feature = "r1cs")]
+#[test]
+fn constraint_field_and_allocation_preserve_encoding() {
+    use ark_ff::ToConstraintField;
+    use ark_r1cs_std::{alloc::AllocVar, R1CSVar};
+    use ark_relations::r1cs::ConstraintSystem;
+    use decaf377::r1cs::ElementVar;
+
+    for scalar in [Fr::ZERO, Fr::ONE, -Fr::ONE, Fr::from(17u64)] {
+        let point = scalar * Element::GENERATOR;
+        let expected = point.vartime_compress_to_field();
+        assert_eq!(point.to_field_elements().unwrap(), vec![expected]);
+        let cs = ConstraintSystem::<Fq>::new_ref();
+        let input = ElementVar::new_input(cs.clone(), || Ok(point)).unwrap();
+        let witness = ElementVar::new_witness(cs.clone(), || Ok(point)).unwrap();
+        assert_eq!(input.compress_to_field().unwrap().value().unwrap(), expected);
+        assert_eq!(witness.compress_to_field().unwrap().value().unwrap(), expected);
+        assert!(cs.is_satisfied().unwrap());
+    }
+}

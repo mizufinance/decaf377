@@ -29,7 +29,7 @@ pub struct ElementVar {
 }
 
 impl ElementVar {
-    /// R1CS equivalent of `Element::vartime_compress_to_field`
+    /// R1CS equivalent of `Element::compress_to_field`
     pub fn compress_to_field(&self) -> Result<FqVar, SynthesisError> {
         // We have affine x, y but our compression formulae are in projective.
         let affine_x_var = &self.inner.x;
@@ -270,7 +270,7 @@ impl AllocVar<Element, Fq> for ElementVar {
                 // One way that is secure but provides stronger constraints than we need:
                 //
                 // 1. Encode (out of circuit) to an Fq
-                let field_element = group_projective_point.vartime_compress_to_field();
+                let field_element = group_projective_point.compress_to_field();
 
                 // 2. Witness the encoded value
                 let compressed_P_var = FqVar::new_witness(cs, || Ok(field_element))?;

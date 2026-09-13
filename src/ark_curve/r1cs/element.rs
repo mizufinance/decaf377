@@ -26,7 +26,7 @@ pub struct ElementVar {
 }
 
 impl ElementVar {
-    /// R1CS equivalent of `Element::vartime_compress_to_field`
+    /// R1CS equivalent of `Element::compress_to_field`
     pub fn compress_to_field(&self) -> Result<FqVar, SynthesisError> {
         self.inner.encoding()
     }
@@ -139,7 +139,7 @@ impl AllocVar<Element, Fq> for ElementVar {
         match mode {
             AllocationMode::Input => {
                 let value: Element = *f()?.borrow();
-                let compressed = value.vartime_compress_to_field();
+                let compressed = value.compress_to_field();
                 Ok(Self::new_input(cs, || Ok(compressed))?)
             }
             _ => {
