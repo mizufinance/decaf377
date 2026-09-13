@@ -142,13 +142,13 @@ impl Element {
 
 impl From<&Element> for Encoding {
     fn from(point: &Element) -> Self {
-        point.vartime_compress()
+        point.compress()
     }
 }
 
 impl From<Element> for Encoding {
     fn from(point: Element) -> Self {
-        point.vartime_compress()
+        point.compress()
     }
 }
 
@@ -183,7 +183,7 @@ impl CanonicalSerialize for Element {
         writer: W,
         mode: ark_serialize::Compress,
     ) -> Result<(), ark_serialize::SerializationError> {
-        self.vartime_compress().serialize_with_mode(writer, mode)
+        self.compress().serialize_with_mode(writer, mode)
     }
 }
 
@@ -250,7 +250,7 @@ impl TryFrom<[u8; 32]> for Element {
 
 impl From<Element> for [u8; 32] {
     fn from(enc: Element) -> [u8; 32] {
-        enc.vartime_compress().0
+        enc.compress().0
     }
 }
 

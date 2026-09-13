@@ -41,6 +41,6 @@ impl CanonicalSerialize for AffinePoint {
         mode: ark_serialize::Compress,
     ) -> Result<(), ark_serialize::SerializationError> {
         let element: Element = self.into();
-        element.vartime_compress().serialize_with_mode(writer, mode)
+        element.compress().serialize_with_mode(writer, mode)
     }
 }

@@ -7,6 +7,16 @@ fn check(point: Element) {
     assert_eq!(point.compress_to_field(), point.vartime_compress_to_field());
     assert_eq!(actual.0[31] >> 5, 0);
     assert_eq!(actual.0[0] & 1, 0);
+    assert_eq!(Encoding::from(point).0, actual.0);
+    assert_eq!(Encoding::from(&point).0, actual.0);
+    assert_eq!(<[u8; 32]>::from(point), actual.0);
+    #[cfg(feature = "arkworks")]
+    {
+        use ark_serialize::CanonicalSerialize;
+        let mut bytes = [0u8; 32];
+        point.serialize_compressed(&mut bytes[..]).unwrap();
+        assert_eq!(bytes, actual.0);
+    }
     assert_eq!(Encoding(actual.0).vartime_decompress().unwrap(), point);
 }
 

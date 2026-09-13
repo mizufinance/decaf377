@@ -47,7 +47,7 @@ impl core::fmt::Debug for Element {
         // consumers of the library.
         f.write_fmt(format_args!(
             "decaf377::Element({})",
-            hex::encode(&self.vartime_compress().0[..])
+            hex::encode(&self.compress().0[..])
         ))
     }
 }
@@ -57,7 +57,7 @@ impl Display for Element {
         write!(
             f,
             "decaf377::Element({})",
-            hex::encode(&self.vartime_compress().0[..])
+            hex::encode(&self.compress().0[..])
         )
     }
 }

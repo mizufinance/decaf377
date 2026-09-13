@@ -51,7 +51,7 @@ impl core::fmt::Debug for AffinePoint {
         let element: Element = self.into();
         f.write_fmt(format_args!(
             "decaf377::AffinePoint({})",
-            hex::encode(&element.vartime_compress().0[..])
+            hex::encode(&element.compress().0[..])
         ))
     }
 }
@@ -62,7 +62,7 @@ impl Display for AffinePoint {
         write!(
             f,
             "decaf377::AffinePoint({})",
-            hex::encode(&element.vartime_compress().0[..])
+            hex::encode(&element.compress().0[..])
         )
     }
 }
