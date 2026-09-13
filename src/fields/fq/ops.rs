@@ -69,7 +69,11 @@ impl From<i64> for Fq {
 
 impl From<i128> for Fq {
     fn from(other: i128) -> Self {
-        i128::from(other).into()
+        // Reinterpret the bits, then subtract 2^128 for a negative input.
+        // This also handles i128::MIN without signed negation or recursion.
+        let sign = Self::from(((other >> 127) & 1) as u128);
+        let two128 = Self::from(u128::MAX) + Self::ONE;
+        Self::from(other as u128) - sign * two128
     }
 }
 

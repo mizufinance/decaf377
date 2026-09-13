@@ -1,5 +1,6 @@
 use cfg_if::cfg_if;
 use rand_core::CryptoRngCore;
+use subtle::{Choice, ConditionallySelectable};
 
 use crate::EncodingError;
 
@@ -130,14 +131,23 @@ impl Fq {
         Self::from_le_bytes_mod_order(&bytes)
     }
 
-    /// Raise this element to a given power.
+    /// Raise this element to an exponent represented by little-endian u64 limbs.
+    /// The operation schedule depends only on the public number of limbs.
+    /// An empty exponent represents zero and returns one.
     ///
     /// Note: Arkworks provides another method for this, called `pow`.
     pub fn power<S: AsRef<[u64]>>(&self, exp: S) -> Self {
-        let mut res = Fq::from(1u64);
-        let exp_u64 = exp.as_ref();
-        for _ in 0..exp_u64[0] {
-            res *= self;
+        let mut res = Self::ONE;
+        for limb in exp.as_ref().iter().rev() {
+            for bit in (0..64).rev() {
+                let squared = res.square();
+                let multiplied = squared * self;
+                res = Self::conditional_select(
+                    &squared,
+                    &multiplied,
+                    Choice::from(((limb >> bit) & 1) as u8),
+                );
+            }
         }
         res
     }

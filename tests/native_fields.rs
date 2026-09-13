@@ -1,4 +1,4 @@
-use decaf377::{Fq, Fr};
+use decaf377::{Fp, Fq, Fr};
 use subtle::{Choice, ConditionallySelectable, ConstantTimeEq};
 
 #[test]
@@ -49,6 +49,58 @@ fn zero_inverse_and_basic_field_identities() {
         assert_eq!(q.square().to_bytes(), (q * q).to_bytes());
         assert_eq!(r.square().to_bytes(), (r * r).to_bytes());
     }
+}
+
+#[test]
+fn exponentiation_uses_every_limb_and_accepts_empty_exponents() {
+    let base = Fq::from(7u64);
+    assert_eq!(base.power([]).to_bytes(), Fq::ONE.to_bytes());
+    assert_eq!(Fq::ZERO.power([]).to_bytes(), Fq::ONE.to_bytes());
+    assert_eq!(base.power([0]).to_bytes(), Fq::ONE.to_bytes());
+    assert_eq!(base.power([1]).to_bytes(), base.to_bytes());
+    assert_eq!(base.power([2]).to_bytes(), base.square().to_bytes());
+    let mut high = base;
+    for _ in 0..64 {
+        high = high.square();
+    }
+    assert_eq!(base.power([0, 1]).to_bytes(), high.to_bytes());
+    assert_eq!(base.power([1, 1]).to_bytes(), (high * base).to_bytes());
+    #[cfg(feature = "arkworks")]
+    {
+        use ark_ff::Field;
+        for exponent in [
+            vec![],
+            vec![u64::MAX],
+            vec![0, 1],
+            vec![13, 17, 0, u64::MAX],
+        ] {
+            assert_eq!(
+                base.power(&exponent).to_bytes(),
+                base.pow(&exponent).to_bytes()
+            );
+        }
+    }
+}
+
+#[test]
+fn signed_field_conversions_cover_minimum_and_all_input_widths() {
+    macro_rules! check {
+        ($field:ty) => {{
+            for value in [i128::MIN, i128::MIN + 1, -12345, -1, 0, 1, i128::MAX] {
+                let magnitude = <$field>::from(value.unsigned_abs());
+                let expected = if value < 0 { -magnitude } else { magnitude };
+                assert_eq!(<$field>::from(value).to_bytes(), expected.to_bytes());
+            }
+            let negative = -<$field>::from(7u8);
+            assert_eq!(<$field>::from(-7i8).to_bytes(), negative.to_bytes());
+            assert_eq!(<$field>::from(-7i16).to_bytes(), negative.to_bytes());
+            assert_eq!(<$field>::from(-7i32).to_bytes(), negative.to_bytes());
+            assert_eq!(<$field>::from(-7i64).to_bytes(), negative.to_bytes());
+        }};
+    }
+    check!(Fp);
+    check!(Fq);
+    check!(Fr);
 }
 
 #[cfg(feature = "arkworks")]
