@@ -20,6 +20,14 @@ require canonical residues for arithmetic; the Fq sentinel supports equality
 only. Inversion retains its public `Option` behavior and branches on zero.
 Constant-time coverage must account for that domain restriction separately.
 
+`Element::compress` and `compress_to_field` use the shared Rust32 point path,
+public-exponent inversion mapping zero to zero, fixed-schedule Tonelli-Shanks,
+and branchless sign selection. The square-root precondition comes from the
+valid Decaf representative invariant. The native group/encoding refinement
+must prove it, including identity and equivalent representatives. Existing
+`vartime_compress` APIs remain available for public points. The fixed source
+schedule alone does not establish a compiled constant-time guarantee.
+
 These implementation and regression checks are not a complete formal
 certificate. Native execution correspondence, all reachable API refinements,
 compiled traces and consumer/protocol closure remain obligations in the formal

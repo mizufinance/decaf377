@@ -84,6 +84,18 @@ impl Encoding {
 }
 
 impl Element {
+    /// Compress with a fixed arithmetic schedule suitable for secret points.
+    /// Compiled constant-time guarantees depend on the selected build.
+    pub fn compress_to_field(&self) -> Fq {
+        let p = &self.inner;
+        crate::scalar_mul::Point::from_projective([p.x, p.y, p.z, p.t]).compress_to_field()
+    }
+
+    /// Encode with a fixed arithmetic schedule suitable for secret points.
+    pub fn compress(&self) -> Encoding {
+        Encoding(self.compress_to_field().to_bytes_le())
+    }
+
     pub fn negate(&self) -> Element {
         Element { inner: -self.inner }
     }

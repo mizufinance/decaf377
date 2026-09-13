@@ -1,6 +1,46 @@
 //! Fixed-schedule extended Edwards arithmetic over the Fiat field backend.
 use crate::{fields::fq::CtFq, Fq};
-use subtle::{Choice, ConditionallySelectable};
+use subtle::{Choice, ConditionallySelectable, ConstantTimeEq};
+
+// Exponents and loop bounds here are public field constants. In particular,
+// inversion maps zero to zero without the exceptional branch in Option-based
+// inversion. Compression needs this behavior at the identity.
+fn pow_public(base: CtFq, exponent: &[u64; 4]) -> CtFq {
+    let mut out = CtFq::ONE;
+    for limb in exponent.iter().rev() {
+        for bit in (0..64).rev() {
+            out = out.square();
+            if (limb >> bit) & 1 == 1 {
+                out = out.mul(&base);
+            }
+        }
+    }
+    out
+}
+
+fn sqrt_fixed(x: CtFq) -> CtFq {
+    let mut z = pow_public(x, &Fq::TRACE_MINUS_ONE_DIV_TWO_LIMBS);
+    let mut t = z.square().mul(&x);
+    z = z.mul(&x);
+    let mut b = t;
+    let mut c =
+        CtFq::from_montgomery_limbs(Fq::QUADRATIC_NON_RESIDUE_TO_TRACE.to_montgomery_limbs());
+    for i in (2..=Fq::TWO_ADICITY).rev() {
+        for _ in 1..=i - 2 {
+            b = b.square();
+        }
+        let choice = !b.ct_eq(&CtFq::ONE);
+        z = CtFq::conditional_select(&z, &z.mul(&c), choice);
+        c = c.square();
+        t = CtFq::conditional_select(&t, &t.mul(&c), choice);
+        b = t;
+    }
+    z
+}
+
+fn abs_fixed(x: CtFq) -> CtFq {
+    CtFq::conditional_select(&x, &x.neg(), Choice::from(x.to_bytes_le()[0] & 1))
+}
 
 #[derive(Clone, Copy)]
 pub(crate) struct Point {
@@ -11,6 +51,22 @@ pub(crate) struct Point {
 }
 
 impl Point {
+    /// Fixed-schedule Decaf compression for valid group representatives.
+    /// The group invariant makes the inverse-square-root argument a square
+    /// (or zero at the identity); root sign is removed by the final abs.
+    pub(crate) fn compress_to_field(self) -> Fq {
+        let a_minus_d = CtFq::ONE.neg().sub(&Self::D);
+        let u1 = self.x.add(&self.t).mul(&self.x.sub(&self.t));
+        let denominator = u1.mul(&a_minus_d).mul(&self.x.square());
+        let mut exponent = Fq::MODULUS_LIMBS;
+        exponent[0] -= 2;
+        let v = sqrt_fixed(pow_public(denominator, &exponent));
+        let u2 = abs_fixed(v.mul(&u1));
+        let u3 = u2.mul(&self.z).sub(&self.t);
+        let s = abs_fixed(a_minus_d.mul(&v).mul(&u3).mul(&self.x));
+        Fq::from_montgomery_limbs(s.to_montgomery_limbs())
+    }
+
     const IDENTITY: Self = Self {
         x: CtFq::ZERO,
         y: CtFq::ONE,
@@ -112,5 +168,38 @@ impl Point {
             }
         }
         result
+    }
+}
+
+#[cfg(test)]
+mod encoding_tests {
+    use super::*;
+
+    #[test]
+    fn compression_preserves_projective_and_quotient_representatives() {
+        let x = Fq::from_montgomery_limbs([
+            5825153684096051627,
+            16988948339439369204,
+            186539475124256708,
+            1230075515893193738,
+        ]);
+        let y = Fq::from_montgomery_limbs([
+            9786171649960077610,
+            13527783345193426398,
+            10983305067350511165,
+            1251302644532346138,
+        ]);
+        let expected = crate::Element::GENERATOR.vartime_compress_to_field();
+        for scale in [Fq::ONE, -Fq::ONE, Fq::from(7u64), Fq::from(u128::MAX)] {
+            for (x, y, encoding) in [
+                (x, y, expected),
+                (-x, -y, expected),
+                (Fq::ZERO, Fq::ONE, Fq::ZERO),
+                (Fq::ZERO, -Fq::ONE, Fq::ZERO),
+            ] {
+                let point = Point::from_projective([x * scale, y * scale, scale, x * y * scale]);
+                assert_eq!(point.compress_to_field(), encoding);
+            }
+        }
     }
 }

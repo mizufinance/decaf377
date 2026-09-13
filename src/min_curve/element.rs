@@ -159,6 +159,18 @@ impl Element {
         Self { x, y, z, t }
     }
 
+    /// Compress with a fixed arithmetic schedule suitable for secret points.
+    /// Compiled constant-time guarantees depend on the selected build.
+    pub fn compress_to_field(&self) -> Fq {
+        crate::scalar_mul::Point::from_projective([self.x, self.y, self.z, self.t])
+            .compress_to_field()
+    }
+
+    /// Encode with a fixed arithmetic schedule suitable for secret points.
+    pub fn compress(&self) -> Encoding {
+        Encoding(self.compress_to_field().to_bytes_le())
+    }
+
     pub fn vartime_compress_to_field(&self) -> Fq {
         let A_MINUS_D = COEFF_A - COEFF_D;
 
