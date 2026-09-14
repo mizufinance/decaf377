@@ -1,5 +1,5 @@
 use core::ops::{Add, Neg};
-use subtle::{Choice, ConditionallySelectable};
+use subtle::ConditionallySelectable;
 
 use crate::EncodingError;
 use crate::{min_curve::constants::*, min_curve::encoding::Encoding, sign::Sign, Fq};
@@ -135,15 +135,13 @@ impl Element {
         Self::new(x3, y3, z3, t3)
     }
 
-    fn scalar_mul_both<const CT: bool>(self, le_bits: &[u64]) -> Self {
+    /// Variable-time multiplication, for public scalars only.
+    pub fn scalar_mul_vartime(self, le_bits: &[u64]) -> Self {
         let mut acc = Self::IDENTITY;
         let mut insert = self;
         for limb in le_bits {
             for i in 0..64 {
-                let flag = ((limb >> i) & 1) as u8;
-                if CT {
-                    acc = Self::conditional_select(&acc, &(acc + insert), Choice::from(flag))
-                } else if flag == 1 {
+                if (limb >> i) & 1 == 1 {
                     acc = acc + insert;
                 }
                 insert = insert.double();
@@ -152,12 +150,13 @@ impl Element {
         acc
     }
 
-    pub fn scalar_mul_vartime(self, le_bits: &[u64]) -> Self {
-        Self::scalar_mul_both::<false>(self, le_bits)
-    }
-
+    /// Fixed-schedule multiplication; the limb count must be public.
     pub fn scalar_mul(self, le_bits: &[u64]) -> Self {
-        Self::scalar_mul_both::<true>(self, le_bits)
+        let [x, y, z, t] =
+            crate::scalar_mul::Point::from_projective([self.x, self.y, self.z, self.t])
+                .mul(le_bits)
+                .projective();
+        Self { x, y, z, t }
     }
 
     pub fn vartime_compress_to_field(&self) -> Fq {

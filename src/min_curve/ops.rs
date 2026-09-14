@@ -90,7 +90,7 @@ impl Mul<Fr> for Element {
     type Output = Self;
 
     fn mul(self, rhs: Fr) -> Self::Output {
-        Self::scalar_mul_vartime(self, &rhs.to_le_limbs())
+        Self::scalar_mul(self, &rhs.to_le_limbs())
     }
 }
 

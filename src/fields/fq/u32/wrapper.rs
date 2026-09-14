@@ -62,6 +62,14 @@ impl Fq {
         Self(x)
     }
 
+    pub(crate) fn to_montgomery_limbs(&self) -> [u64; N_64] {
+        let mut out = [0u64; N_64];
+        for (i, limb) in out.iter_mut().enumerate() {
+            *limb = self.0 .0[2 * i] as u64 | ((self.0 .0[2 * i + 1] as u64) << 32);
+        }
+        out
+    }
+
     pub(crate) fn to_le_limbs(&self) -> [u64; N_64] {
         debug_assert!(!self.is_sentinel());
 

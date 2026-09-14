@@ -46,6 +46,10 @@ impl Fq {
         Self(ArkworksFq::from_le_bytes_mod_order(bytes))
     }
 
+    pub(crate) fn to_montgomery_limbs(&self) -> [u64; N_64] {
+        self.0 .0 .0
+    }
+
     pub(crate) fn to_le_limbs(&self) -> [u64; N_64] {
         debug_assert!(!self.is_sentinel());
 

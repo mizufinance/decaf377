@@ -1,10 +1,6 @@
 use core::ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign};
 
-use ark_ec::twisted_edwards::Projective;
-
-use crate::{
-    ark_curve::element::AffinePoint, ark_curve::Decaf377EdwardsConfig, ark_curve::Element, Fr,
-};
+use crate::{ark_curve::element::AffinePoint, ark_curve::Element, Fr};
 
 impl<'a, 'b> Add<&'b AffinePoint> for &'a AffinePoint {
     type Output = AffinePoint;
@@ -137,9 +133,7 @@ impl Neg for AffinePoint {
 
 impl<'b> MulAssign<&'b Fr> for AffinePoint {
     fn mul_assign(&mut self, point: &'b Fr) {
-        let mut p: Projective<Decaf377EdwardsConfig> = self.inner.into();
-        p *= *point;
-        *self = AffinePoint { inner: p.into() }
+        *self = &*self * point;
     }
 }
 
@@ -153,9 +147,12 @@ impl<'a, 'b> Mul<&'b Fr> for &'a AffinePoint {
     type Output = AffinePoint;
 
     fn mul(self, point: &'b Fr) -> AffinePoint {
-        let mut p: Projective<Decaf377EdwardsConfig> = self.inner.into();
-        p *= *point;
-        AffinePoint { inner: p.into() }
+        let [x, y] = crate::scalar_mul::Point::from_affine(self.inner.x, self.inner.y)
+            .mul(&point.to_le_limbs())
+            .affine();
+        AffinePoint {
+            inner: crate::ark_curve::edwards::EdwardsAffine::new_unchecked(x, y),
+        }
     }
 }
 
